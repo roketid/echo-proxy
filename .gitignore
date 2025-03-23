@@ -1,0 +1,36 @@
+# Binaries
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+/build/
+/dist/
+*.out
+*.a
+*.o
+
+# Logs
+/logs/
+*.log
+
+# Environment and dependency files
+.env
+.env.local
+.env.*
+
+# IDE/editor settings
+/.vscode/
+/.idea/
+*.swp
+*.swo
+
+# Cache
+/.cache/
+/tmp/
+
+
+# Configs
+/config/config.json

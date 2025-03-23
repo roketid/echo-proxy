@@ -1,0 +1,31 @@
+{
+  "example.com": {
+    "upstream": "https://example.com",
+    "host_override": "",
+    "request_headers": {
+      "X-Custom-Header": "MyValue"
+    },
+    "response_headers": {
+      "X-Response-Header": "ResponseValue"
+    },
+    "removed_headers": [
+      "Server",
+      "X-Powered-By",
+      "Set-Cookie"
+    ]
+  },
+  "another.com": {
+    "upstream": "https://another.com",
+    "host_override": "",
+    "request_headers": {
+      "X-Another-Header": "AnotherValue"
+    },
+    "response_headers": {
+      "X-Another-Response": "AnotherResponseValue"
+    },
+    "removed_headers": [
+      "Server",
+      "Set-Cookie"
+    ]
+  }
+}

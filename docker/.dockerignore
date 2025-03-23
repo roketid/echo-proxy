@@ -1,0 +1,16 @@
+# Ignore Go build artifacts
+/bin/
+/pkg/
+
+# Ignore local config files
+config.json
+.env
+
+# Ignore OS and IDE files
+*.swp
+*.swo
+*.bak
+.DS_Store
+.idea/
+.vscode/
+node_modules/
