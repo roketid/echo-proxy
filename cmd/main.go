@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/yourusername/echoproxy/internal/middleware"
+	"github.com/roketid/echo-proxy/internal/middleware"
 	"github.com/roketid/echo-proxy/internal/proxy"
 )
 
