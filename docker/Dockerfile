@@ -12,7 +12,7 @@ RUN go build -o echoproxy cmd/main.go
 FROM debian:bullseye-slim
 
 # Create a non-root user
-groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app/
 
