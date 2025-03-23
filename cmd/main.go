@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/yourusername/echoproxy/internal/middleware"
 	"github.com/roketid/echo-proxy/internal/proxy"
 )
 
@@ -28,6 +29,9 @@ func main() {
 
 	proxyServer := proxy.NewProxyManager(configs)
 	e := proxyServer.NewProxy()
+
+	// Register the logging middleware
+	e.Use(middleware.RequestLoggerMiddleware)
 
 	log.Printf("Starting proxy server on port %s...\n", port)
 	e.Start(":" + port)
