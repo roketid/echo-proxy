@@ -1,23 +1,35 @@
-FROM golang:1.24 AS builder
+# Use the official Golang image as the builder stage
+FROM golang:alpine as builder
 
+# Set the working directory
 WORKDIR /app
 
+# Copy go modules files
 COPY go.mod go.sum ./
+
+# Download the Go modules
 RUN go mod download
 
-COPY . ./
-RUN go build -o echoproxy cmd/main.go
+# Copy the entire source code
+COPY . .
 
-# Create the final image
-FROM debian:bullseye-slim
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.go
+
+# Start a new stage from scratch
+FROM alpine:latest
+
+# Install necessary dependencies (if any)
+RUN apk add --no-cache ca-certificates
 
 # Create a non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN addgroup -S appuser && adduser -S appuser -G appuser
 
 WORKDIR /app/
 
-COPY --from=builder /app/echoproxy /usr/local/bin/echoproxy
-COPY ./config/config.example.json /app/config.json
+# Copy the built binary from the builder stage
+COPY --from=builder /app/main .
+COPY ./config/config.example.json ./config.json
 
 # Set ownership and permissions
 RUN chown -R appuser:appuser /app && chmod -R 755 /app
@@ -26,4 +38,6 @@ RUN chown -R appuser:appuser /app && chmod -R 755 /app
 USER appuser
 
 ENV PORT=8080
-CMD ["/usr/local/bin/echoproxy", "-config", "/app/config.json"]
+
+# Command to run
+CMD ["./main", "-config", "config.json"]
