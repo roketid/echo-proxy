@@ -48,4 +48,3 @@ func TestProxyHandler(t *testing.T) {
 	assert.NotContains(t, rec.Header(), "X-Test-Response") // Ensure removed header is gone
 	assert.Equal(t, "ProxyTest", rec.Header().Get("X-Proxy-Header"))
 }
-
