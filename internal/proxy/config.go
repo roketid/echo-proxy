@@ -2,8 +2,8 @@ package proxy
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
+	"os"
 )
 
 // ProxyConfig holds the configuration for the proxy
@@ -19,7 +19,7 @@ type ProxyConfig struct {
 func LoadConfig(configFile string) map[string]ProxyConfig {
 	configs := make(map[string]ProxyConfig)
 
-	data, err := ioutil.ReadFile(configFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatalf("Failed to read config file %s: %v", configFile, err)
 	}
