@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/brotli/go/cbrotli"
+	"github.com/andybalholm/brotli"
 	"github.com/labstack/echo/v4"
 )
 
@@ -67,7 +67,7 @@ func ModifyResponseContent(res *http.Response, config ProxyConfig) error {
 	contentEncoding := res.Header.Get("Content-Encoding")
 	var decodedBody []byte
 	if contentEncoding == "br" {
-		reader := cbrotli.NewReader(bytes.NewReader(bodyBytes))
+		reader := brotli.NewReader(bytes.NewReader(bodyBytes))
 		decodedBody, err = io.ReadAll(reader)
 		if err != nil {
 			return fmt.Errorf("Error decoding Brotli response: %v", err)

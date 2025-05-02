@@ -7,9 +7,10 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
+require github.com/andybalholm/brotli v1.1.1
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/google/brotli/go/cbrotli v0.0.0-20250131134309-440e03642b89
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
