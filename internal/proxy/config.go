@@ -8,11 +8,12 @@ import (
 
 // ProxyConfig holds the configuration for the proxy
 type ProxyConfig struct {
-	Upstream        string            `json:"upstream"`
-	HostOverride    string            `json:"host_override"`
-	RequestHeaders  map[string]string `json:"request_headers"`
-	ResponseHeaders map[string]string `json:"response_headers"`
-	RemovedHeaders  []string          `json:"removed_headers"`
+	Upstream         string            `json:"upstream"`
+	HostOverride     string            `json:"host_override"`
+	RequestHeaders   map[string]string `json:"request_headers"`
+	ResponseHeaders  map[string]string `json:"response_headers"`
+	RemovedHeaders   []string          `json:"removed_headers"`
+	ContentReplacers map[string]string `json:"content_replacers"`
 }
 
 // LoadConfig loads the proxy configuration from a JSON file

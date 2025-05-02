@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -41,6 +42,11 @@ func (pm *ProxyManager) NewProxy() *echo.Echo {
 		proxy := httputil.NewSingleHostReverseProxy(target)
 		proxy.ModifyResponse = func(res *http.Response) error {
 			ModifyResponseHeaders(res, config)
+
+			if err := ModifyResponseContent(res, config); err != nil {
+				fmt.Println("error ModifyResponseContent,", err)
+			}
+
 			return nil
 		}
 
