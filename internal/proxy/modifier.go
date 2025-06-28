@@ -30,7 +30,7 @@ func ModifyRequest(req *http.Request, c echo.Context, target *url.URL, config Pr
 // ModifyResponseHeaders modifies the response headers
 func ModifyResponseHeaders(res *http.Response, config ProxyConfig) {
 	// Remove unwanted response headers
-	for _, header := range config.RemovedHeaders {
+	for _, header := range config.RemoveHeaders {
 		res.Header.Del(header)
 	}
 	// Add additional response headers

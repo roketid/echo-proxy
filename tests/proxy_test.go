@@ -9,10 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testResponseHeader = "X-Test-Response"
+const condComHost = "cond.com"
+const apiKeyHeader = "X-Api-Key"
+
 func TestProxyHandler(t *testing.T) {
 	// Create a test upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Test-Response", "Success")
+		w.Header().Set(testResponseHeader, "Success")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Hello from upstream"))
 	}))
@@ -25,7 +29,7 @@ func TestProxyHandler(t *testing.T) {
 			HostOverride:    "",
 			RequestHeaders:  map[string]string{"X-Custom-Header": "TestValue"},
 			ResponseHeaders: map[string]string{"X-Proxy-Header": "ProxyTest"},
-			RemovedHeaders:  []string{"X-Test-Response"},
+			RemoveHeaders:   []string{testResponseHeader},
 		},
 	}
 
@@ -45,6 +49,80 @@ func TestProxyHandler(t *testing.T) {
 	// Validate response
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Hello from upstream")
-	assert.NotContains(t, rec.Header(), "X-Test-Response") // Ensure removed header is gone
+	assert.NotContains(t, rec.Header(), testResponseHeader) // Ensure removed header is gone
 	assert.Equal(t, "ProxyTest", rec.Header().Get("X-Proxy-Header"))
+}
+
+func TestProxyConditionHeader(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Condition met"))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		condComHost: {
+			Upstream: upstream.URL,
+			Condition: &proxy.ProxyCondition{
+				Header: apiKeyHeader,
+				Value:  "secret-key",
+			},
+			FallbackBehavior: "404",
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	// Should proxy (header matches)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = condComHost
+	req.Header.Set(apiKeyHeader, "secret-key")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Condition met")
+
+	// Should fallback (header does not match)
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.Host = condComHost
+	req2.Header.Set(apiKeyHeader, "wrong-key")
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusNotFound, rec2.Code)
+}
+
+func TestProxyConditionQueryParam(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Query param met"))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		condComHost: {
+			Upstream: upstream.URL,
+			Condition: &proxy.ProxyCondition{
+				QueryParam: "token",
+				Value:      "abc123",
+			},
+			FallbackBehavior: "404",
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	// Should proxy (query param matches)
+	req := httptest.NewRequest(http.MethodGet, "/?token=abc123", nil)
+	req.Host = condComHost
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Query param met")
+
+	// Should fallback (query param does not match)
+	req2 := httptest.NewRequest(http.MethodGet, "/?token=wrong", nil)
+	req2.Host = condComHost
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusNotFound, rec2.Code)
 }

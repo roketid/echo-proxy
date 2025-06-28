@@ -49,17 +49,42 @@ Create a `config.json` file with the following example configuration:
     "host_override": "",
     "request_headers": {"X-Custom-Header": "MyValue"},
     "response_headers": {"X-Response-Header": "ResponseValue"},
-    "removed_headers": ["Server", "X-Powered-By", "Set-Cookie"]
+    "remove_headers": ["Server", "X-Powered-By", "Set-Cookie"],
+    "condition": {
+      "header": "X-Api-Key",
+      "value": "secret-key"
+    },
+    "fallback_behavior": "404"
   },
   "another.com": {
     "upstream": "https://another.com",
     "host_override": "",
     "request_headers": {"X-Another-Header": "AnotherValue"},
     "response_headers": {"X-Another-Response": "AnotherResponseValue"},
-    "removed_headers": ["Server", "Set-Cookie"]
+    "remove_headers": ["Server", "Set-Cookie"]
   }
 }
 ```
+
+### Conditional Proxying
+You can add a `condition` object to a host config to only proxy requests that match a specific header or query parameter value. Only equality is supported:
+
+- To match a header:
+  ```json
+  "condition": {
+    "header": "X-Api-Key",
+    "value": "secret-key"
+  }
+  ```
+- To match a query parameter:
+  ```json
+  "condition": {
+    "query_param": "token",
+    "value": "mytoken"
+  }
+  ```
+
+If the condition is not met, the proxy will use the `fallback_behavior` (e.g., "404", "bad_gateway", or proxy to a fallback upstream if `fallback_upstream` is set).
 
 ## Using Docker
 ### Build and Run the Container
