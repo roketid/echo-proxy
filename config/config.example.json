@@ -27,5 +27,24 @@
       "Server",
       "Set-Cookie"
     ]
+  },
+  "conditional.com": {
+    "upstream": "https://conditional-upstream.com",
+    "host_override": "",
+    "request_headers": {
+      "X-Conditional": "CondValue"
+    },
+    "response_headers": {
+      "X-Conditional-Response": "CondResponse"
+    },
+    "remove_headers": [
+      "Server"
+    ],
+    "condition": {
+      "header": "X-Api-Key",
+      "value": "secret-key"
+    },
+    "fallback_behavior": "fallback_upstream",
+    "fallback_upstream": "https://fallback-upstream.com"
   }
 }
