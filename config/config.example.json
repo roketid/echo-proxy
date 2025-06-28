@@ -8,7 +8,7 @@
     "response_headers": {
       "X-Response-Header": "ResponseValue"
     },
-    "removed_headers": [
+    "remove_headers": [
       "Server",
       "X-Powered-By",
       "Set-Cookie"
@@ -23,7 +23,7 @@
     "response_headers": {
       "X-Another-Response": "AnotherResponseValue"
     },
-    "removed_headers": [
+    "remove_headers": [
       "Server",
       "Set-Cookie"
     ]
