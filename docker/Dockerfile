@@ -31,13 +31,15 @@ WORKDIR /app/
 COPY --from=builder /app/main .
 COPY ./config/config.example.json ./config.json
 
+# Variables
+ENV CONFIG_PATH=/app/config.json
+ENV PORT=8080
+
 # Set ownership and permissions
 RUN chown -R appuser:appuser /app && chmod -R 755 /app
 
 # Switch to non-root user
 USER appuser
 
-ENV PORT=8080
-
 # Command to run
-CMD ["./main", "-config", "config.json"]
+CMD ["sh", "-c", "./main -config ${CONFIG_PATH}"]
