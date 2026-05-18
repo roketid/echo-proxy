@@ -1,64 +1,70 @@
 {
-  "example.com": {
-    "upstream": "https://example.com",
-    "host_override": "",
+  "httpbin.local": {
+    "upstream": "https://httpbin.org",
+    "host_override": "httpbin.org",
     "request_headers": {
-      "X-Custom-Header": "MyValue"
+      "X-Custom-Header": "MyValue",
+      "X-Proxy": "echo-proxy"
     },
     "response_headers": {
       "X-Response-Header": "ResponseValue"
     },
     "remove_headers": [
-      "Server",
-      "X-Powered-By",
-      "Set-Cookie"
-    ]
+      "Server"
+    ],
+    "dial_timeout": 30,
+    "read_timeout": 30,
+    "idle_timeout": 90
   },
-  "another.com": {
-    "upstream": "https://another.com",
-    "host_override": "",
+  "api.httpbin.local": {
+    "upstream": "https://httpbin.org",
+    "host_override": "httpbin.org",
     "request_headers": {
-      "X-Another-Header": "AnotherValue"
+      "X-Api-Version": "v1"
     },
     "response_headers": {
-      "X-Another-Response": "AnotherResponseValue"
+      "X-Response-Version": "v1"
     },
     "remove_headers": [
-      "Server",
-      "Set-Cookie"
+      "Server"
     ]
   },
-  "conditional.com": {
-    "upstream": "https://conditional-upstream.com",
-    "host_override": "",
+  "conditional.httpbin.local": {
+    "upstream": "https://httpbin.org/get",
+    "host_override": "httpbin.org",
     "request_headers": {
-      "X-Conditional": "CondValue"
+      "X-Conditional": "True"
     },
     "response_headers": {
-      "X-Conditional-Response": "CondResponse"
+      "X-Conditional-Response": "Allowed"
     },
     "remove_headers": [
       "Server"
     ],
     "condition": {
       "header": "X-Api-Key",
-      "value": "secret-key"
+      "value": "secret-key-12345"
     },
     "fallback_behavior": "fallback_upstream",
-    "fallback_upstream": "https://fallback-upstream.com"
+    "fallback_upstream": "https://httpbin.org/status/403"
   },
-  "append.com": {
-    "upstream": "http://localhost:8081",
+  "append.httpbin.local": {
+    "upstream": "https://httpbin.org",
+    "host_override": "httpbin.org",
     "path_rewrite_regex": "^/(.*)",
-    "path_rewrite_replacement": "/api/$1"
+    "path_rewrite_replacement": "/$1",
+    "dial_timeout": 15,
+    "read_timeout": 20
   },
-  "remove.com": {
-    "upstream": "http://localhost:8082",
-    "path_rewrite_regex": "^/v1/(.*)",
+  "remove-prefix.httpbin.local": {
+    "upstream": "https://httpbin.org",
+    "host_override": "httpbin.org",
+    "path_rewrite_regex": "^/api/v1/(.*)",
     "path_rewrite_replacement": "/$1"
   },
-  "replace.com": {
-    "upstream": "http://localhost:8083",
+  "rewrite.httpbin.local": {
+    "upstream": "https://httpbin.org",
+    "host_override": "httpbin.org",
     "path_rewrite_regex": "^/old/(.*)",
     "path_rewrite_replacement": "/new/$1"
   }
