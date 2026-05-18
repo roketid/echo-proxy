@@ -40,7 +40,7 @@ func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 
 	// Ensure config is initialized (for tests and backward compatibility)
 	if config.ParsedURL == nil && config.Upstream != "" {
-		initializeConfig(host, &config)
+		initializeConfig(&config)
 		pm.Proxies[host] = config
 	}
 
@@ -148,7 +148,7 @@ func parseURL(urlStr string) (*url.URL, error) {
 }
 
 // initializeConfig initializes a single config with compiled regex and parsed URLs
-func initializeConfig(host string, cfg *ProxyConfig) {
+func initializeConfig(cfg *ProxyConfig) {
 	if cfg.PathRewriteRegex != "" {
 		re, _ := regexp.Compile(cfg.PathRewriteRegex)
 		cfg.CompiledRegex = re
