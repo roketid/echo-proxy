@@ -35,13 +35,21 @@ func main() {
   git clone https://github.com/roketid/echo-proxy.git
   cd echoproxy
   ```
-- Build and run:
+- Build and run with config file:
   ```sh
-  go build -o proxy-server
+  go build -o proxy-server ./cmd/main.go
   ./proxy-server -config config.json
   ```
+- Or run with base64-encoded config from environment:
+  ```sh
+  # Encode your config.json as base64
+  export PROXY_CONFIG=$(base64 -w 0 < config.json)
+  ./proxy-server -config-env PROXY_CONFIG
+  ```
 
-## Configuration via `config.json`
+## Configuration
+
+### Via `config.json` File
 Create a `config.json` file with the following example configuration:
 
 ```
@@ -67,6 +75,29 @@ Create a `config.json` file with the following example configuration:
   }
 }
 ```
+
+### Via Environment Variable (Base64 Encoded)
+You can also pass your configuration as a base64-encoded JSON string via an environment variable. This is useful for containerized deployments:
+
+```bash
+# Encode your config.json as base64
+export PROXY_CONFIG=$(base64 -w 0 < config.json)
+
+# Run the proxy with ENV config
+./proxy-server -config-env PROXY_CONFIG
+```
+
+**Example with inline config:**
+```bash
+# Create base64 config
+CONFIG_JSON='{"example.com": {"upstream": "https://example.com"}}'
+export PROXY_CONFIG=$(echo -n "$CONFIG_JSON" | base64 -w 0)
+
+# Run the proxy
+./proxy-server -config-env PROXY_CONFIG
+```
+
+This approach is ideal for Kubernetes, Docker, and other containerized environments where you want to pass configuration through environment variables.
 
 ### Conditional Proxying
 You can add a `condition` object to a host config to only proxy requests that match a specific header or query parameter value. Only equality is supported:
@@ -121,6 +152,39 @@ Common use cases:
   "path_rewrite_regex": "^/old/(.*)",
   "path_rewrite_replacement": "/new/$1"
   ```
+
+### Timeout Configuration
+You can configure timeout settings for each upstream service (all values in seconds):
+
+```json
+{
+  "api.example.com": {
+    "upstream": "https://backend.example.com",
+    "dial_timeout": 30,      // Connection establishment timeout
+    "read_timeout": 30,      // Read operation timeout
+    "write_timeout": 30,     // Write operation timeout
+    "idle_timeout": 90       // Connection idle timeout
+  }
+}
+```
+
+Default timeouts are:
+- `dial_timeout`: 30 seconds
+- `read_timeout`: 30 seconds
+- `write_timeout`: 30 seconds
+- `idle_timeout`: 90 seconds
+
+### Performance Optimizations for High Traffic
+The proxy includes several optimizations for handling high-traffic scenarios:
+
+- **Pre-compiled regex patterns**: Path rewriting regex patterns are compiled once at startup, not per-request
+- **Pre-parsed URLs**: Upstream URLs are parsed once at initialization
+- **Connection pooling**: Configurable HTTP connection pooling with persistent connections
+  - Max 100 concurrent connections per host
+  - Max 100 idle connections
+  - 30-second keep-alive interval
+- **Efficient header management**: Fast header modification and removal
+- **Concurrent request handling**: Full support for concurrent requests with proper resource management
 
 ## Using Docker
 ### Build and Run the Container

@@ -11,16 +11,24 @@ import (
 )
 
 func main() {
-	// Define and parse the command-line argument for the config file
 	configPath := flag.String("config", "", "Path to the proxy config JSON file")
+	envVar := flag.String("config-env", "", "Environment variable containing base64-encoded proxy config JSON")
 	flag.Parse()
 
-	if *configPath == "" {
+	var configs map[string]proxy.ProxyConfig
+
+	// Load config from environment variable (base64 encoded) if specified
+	if *envVar != "" {
+		configs = proxy.LoadConfigFromEnv(*envVar)
+	} else if *configPath != "" {
+		// Load config from file
+		configs = proxy.LoadConfig(*configPath)
+	} else {
 		fmt.Println("Usage: ./echo-proxy -config=config.json")
+		fmt.Println("   or: ./echo-proxy -config-env=PROXY_CONFIG")
+		fmt.Println("\nWhere PROXY_CONFIG is a base64-encoded JSON configuration")
 		os.Exit(1)
 	}
-
-	configs := proxy.LoadConfig(*configPath)
 
 	port := os.Getenv("PORT")
 	if port == "" {

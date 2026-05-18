@@ -3,7 +3,6 @@ package proxy
 import (
 	"net/http"
 	"net/url"
-	"regexp"
 
 	"github.com/labstack/echo/v4"
 )
@@ -27,10 +26,9 @@ func ModifyRequest(req *http.Request, c echo.Context, target *url.URL, config Pr
 	}
 	req.Header.Set("X-Forwarded-For", c.RealIP())
 
-	// Handle path rewriting if specified
-	if config.PathRewriteRegex != "" && config.PathRewriteReplacement != "" {
-		re := regexp.MustCompile(config.PathRewriteRegex)
-		req.URL.Path = re.ReplaceAllString(req.URL.Path, config.PathRewriteReplacement)
+	// Handle path rewriting if specified (using pre-compiled regex)
+	if config.CompiledRegex != nil && config.PathRewriteReplacement != "" {
+		req.URL.Path = config.CompiledRegex.ReplaceAllString(req.URL.Path, config.PathRewriteReplacement)
 	}
 }
 

@@ -1,9 +1,12 @@
 package proxy
 
 import (
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -35,11 +38,17 @@ func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
 	}
 
+	// Ensure config is initialized (for tests and backward compatibility)
+	if config.ParsedURL == nil && config.Upstream != "" {
+		initializeConfig(host, &config)
+		pm.Proxies[host] = config
+	}
+
 	if config.Condition != nil && !pm.checkCondition(c, config.Condition) {
 		return pm.handleFallback(c, config)
 	}
 
-	return pm.serveProxy(c, config.Upstream, config)
+	return pm.serveProxy(c, config)
 }
 
 func (pm *ProxyManager) checkCondition(c echo.Context, cond *ProxyCondition) bool {
@@ -55,8 +64,14 @@ func (pm *ProxyManager) checkCondition(c echo.Context, cond *ProxyCondition) boo
 func (pm *ProxyManager) handleFallback(c echo.Context, config ProxyConfig) error {
 	switch config.FallbackBehavior {
 	case "fallback_upstream":
+		if config.ParsedFallbackURL != nil {
+			return pm.serveFallbackProxy(c, config)
+		}
 		if config.FallbackUpstream != "" {
-			return pm.serveProxy(c, config.FallbackUpstream, config)
+			// Parse on demand for backward compatibility
+			parsedURL, _ := parseURL(config.FallbackUpstream)
+			config.ParsedFallbackURL = parsedURL
+			return pm.serveFallbackProxy(c, config)
 		}
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "No fallback upstream configured"})
 	case "404":
@@ -68,12 +83,22 @@ func (pm *ProxyManager) handleFallback(c echo.Context, config ProxyConfig) error
 	}
 }
 
-func (pm *ProxyManager) serveProxy(c echo.Context, upstream string, config ProxyConfig) error {
-	target, err := url.Parse(upstream)
-	if err != nil {
-		return err
-	}
+func (pm *ProxyManager) serveFallbackProxy(c echo.Context, config ProxyConfig) error {
+	target := config.ParsedFallbackURL
 	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   time.Duration(config.DialTimeout) * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     100,
+		IdleConnTimeout:     time.Duration(config.IdleTimeout) * time.Second,
+	}
+	proxy.Transport = transport
+
 	proxy.ModifyResponse = func(res *http.Response) error {
 		ModifyResponseHeaders(res, config)
 		return nil
@@ -83,4 +108,72 @@ func (pm *ProxyManager) serveProxy(c echo.Context, upstream string, config Proxy
 	}
 	proxy.ServeHTTP(c.Response(), c.Request())
 	return nil
+}
+
+func (pm *ProxyManager) serveProxy(c echo.Context, config ProxyConfig) error {
+	target := config.ParsedURL
+	if target == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid upstream URL"})
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	// Configure HTTP transport with connection pooling and timeouts
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   time.Duration(config.DialTimeout) * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     100,
+		IdleConnTimeout:     time.Duration(config.IdleTimeout) * time.Second,
+	}
+	proxy.Transport = transport
+
+	proxy.ModifyResponse = func(res *http.Response) error {
+		ModifyResponseHeaders(res, config)
+		return nil
+	}
+	proxy.Director = func(req *http.Request) {
+		ModifyRequest(req, c, target, config)
+	}
+	proxy.ServeHTTP(c.Response(), c.Request())
+	return nil
+}
+
+// parseURL is a helper function to parse URLs
+func parseURL(urlStr string) (*url.URL, error) {
+	return url.Parse(urlStr)
+}
+
+// initializeConfig initializes a single config with compiled regex and parsed URLs
+func initializeConfig(host string, cfg *ProxyConfig) {
+	if cfg.PathRewriteRegex != "" {
+		re, _ := regexp.Compile(cfg.PathRewriteRegex)
+		cfg.CompiledRegex = re
+	}
+
+	if cfg.Upstream != "" {
+		parsedURL, _ := parseURL(cfg.Upstream)
+		cfg.ParsedURL = parsedURL
+	}
+
+	if cfg.FallbackUpstream != "" {
+		parsedURL, _ := parseURL(cfg.FallbackUpstream)
+		cfg.ParsedFallbackURL = parsedURL
+	}
+
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = 30
+	}
+	if cfg.ReadTimeout == 0 {
+		cfg.ReadTimeout = 30
+	}
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = 30
+	}
+	if cfg.IdleTimeout == 0 {
+		cfg.IdleTimeout = 90
+	}
 }
