@@ -126,3 +126,64 @@ func TestProxyConditionQueryParam(t *testing.T) {
 	e.ServeHTTP(rec2, req2)
 	assert.Equal(t, http.StatusNotFound, rec2.Code)
 }
+
+func TestProxyRewritePath(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Echo back the path for verification
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Path: " + r.URL.Path))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"rewrite.com": {
+			Upstream:               upstream.URL,
+			PathRewriteRegex:       "^/old/(.*)",
+			PathRewriteReplacement: "/new/$1",
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	// Should rewrite /old/test to /new/test
+	req := httptest.NewRequest(http.MethodGet, "/old/test", nil)
+	req.Host = "rewrite.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Path: /new/test")
+
+	// Should rewrite /old/abc/123 to /new/abc/123
+	req2 := httptest.NewRequest(http.MethodGet, "/old/abc/123", nil)
+	req2.Host = "rewrite.com"
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+	assert.Contains(t, rec2.Body.String(), "Path: /new/abc/123")
+}
+
+func TestProxyFallbackBehavior(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Fallback upstream"))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"fallback.com": {
+			Upstream:         upstream.URL,
+			FallbackBehavior: "fallback_upstream",
+			FallbackUpstream: upstream.URL,
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	// Should fallback to the configured upstream
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "fallback.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Fallback upstream")
+}

@@ -6,6 +6,8 @@ This project is a reverse proxy built using the Echo framework in Golang. It sup
 - Proxy multiple upstream services based on the `Host` header.
 - Modify request and response headers.
 - Remove specific headers from responses.
+- Rewrite request paths using regex patterns.
+- Conditional proxying based on headers or query parameters.
 - Configuration via `json` file.
 - Supports Docker deployment.
 
@@ -85,6 +87,40 @@ You can add a `condition` object to a host config to only proxy requests that ma
   ```
 
 If the condition is not met, the proxy will use the `fallback_behavior` (e.g., "404", "bad_gateway", or proxy to a fallback upstream if `fallback_upstream` is set).
+
+### Path Rewriting
+You can rewrite request paths using regex patterns by adding `path_rewrite_regex` and `path_rewrite_replacement` to your host config:
+
+```json
+{
+  "api.example.com": {
+    "upstream": "https://backend.example.com",
+    "path_rewrite_regex": "^/v1/(.*)",
+    "path_rewrite_replacement": "/api/$1"
+  }
+}
+```
+
+This configuration will rewrite requests from `/v1/users` to `/api/users` before forwarding to the upstream server.
+
+Common use cases:
+- **Add prefix**: Transform `/users` → `/api/v2/users`
+  ```json
+  "path_rewrite_regex": "^/(.*)",
+  "path_rewrite_replacement": "/api/v2/$1"
+  ```
+
+- **Remove prefix**: Transform `/v1/users` → `/users`
+  ```json
+  "path_rewrite_regex": "^/v1/(.*)",
+  "path_rewrite_replacement": "/$1"
+  ```
+
+- **Replace path segment**: Transform `/old/path` → `/new/path`
+  ```json
+  "path_rewrite_regex": "^/old/(.*)",
+  "path_rewrite_replacement": "/new/$1"
+  ```
 
 ## Using Docker
 ### Build and Run the Container

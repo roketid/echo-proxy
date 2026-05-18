@@ -19,6 +19,9 @@ type ProxyConfig struct {
 	// Fallback behavior: "fallback_upstream", "404", "bad_gateway", etc.
 	FallbackBehavior string `json:"fallback_behavior,omitempty"`
 	FallbackUpstream string `json:"fallback_upstream,omitempty"`
+	// Rewrite path if needed
+	PathRewriteRegex       string `json:"path_rewrite_regex,omitempty"`       // regex pattern
+	PathRewriteReplacement string `json:"path_rewrite_replacement,omitempty"` // replacement string
 }
 
 // ProxyCondition defines a condition for proxying

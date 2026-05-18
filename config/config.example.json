@@ -46,5 +46,20 @@
     },
     "fallback_behavior": "fallback_upstream",
     "fallback_upstream": "https://fallback-upstream.com"
+  },
+  "append.com": {
+    "upstream": "http://localhost:8081",
+    "path_rewrite_regex": "^/(.*)",
+    "path_rewrite_replacement": "/api/$1"
+  },
+  "remove.com": {
+    "upstream": "http://localhost:8082",
+    "path_rewrite_regex": "^/v1/(.*)",
+    "path_rewrite_replacement": "/$1"
+  },
+  "replace.com": {
+    "upstream": "http://localhost:8083",
+    "path_rewrite_regex": "^/old/(.*)",
+    "path_rewrite_replacement": "/new/$1"
   }
 }
