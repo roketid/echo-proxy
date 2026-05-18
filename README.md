@@ -187,16 +187,39 @@ The proxy includes several optimizations for handling high-traffic scenarios:
 - **Concurrent request handling**: Full support for concurrent requests with proper resource management
 
 ## Using Docker
+
 ### Build and Run the Container
 ```sh
-docker build -t roketid/echo-proxy .
+docker build -f docker/Dockerfile -t roketid/echo-proxy .
 docker run -p 8080:8080 -v $(PWD)/config.json:/app/config.json roketid/echo-proxy
+```
+
+### With Base64-Encoded Config (Environment Variable)
+The Docker image automatically detects if `PROXY_CONFIG` environment variable is set and uses it:
+
+```sh
+# Encode your config to base64
+CONFIG_B64=$(base64 -w 0 < config.json)
+
+# Run with base64 config
+docker run -p 8080:8080 -e PROXY_CONFIG="$CONFIG_B64" roketid/echo-proxy
 ```
 
 ### Using Pre-built Image (GitHub Container Registry)
 ```sh
+# With config file
 docker run -p 8080:8080 -v $(PWD)/config.json:/app/config.json ghcr.io/roketid/echo-proxy:main
+
+# With base64 config from environment
+docker run -p 8080:8080 -e PROXY_CONFIG="$CONFIG_B64" ghcr.io/roketid/echo-proxy:main
 ```
+
+### How It Works
+The Dockerfile CMD automatically selects the right approach:
+- If `PROXY_CONFIG` environment variable is set → uses `-config-env PROXY_CONFIG`
+- Otherwise → uses config file from `CONFIG_PATH` (default: `/app/config.json`)
+
+This makes it flexible for both traditional volume-mounted configs and containerized deployments using environment variables.
 
 ## GitHub Actions - Automated Docker Image Deployment
 This project includes a GitHub Actions workflow that builds and pushes the Docker image to GitHub Container Registry when changes are pushed to the `main` branch.

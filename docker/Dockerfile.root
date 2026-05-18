@@ -17,4 +17,5 @@ COPY --from=builder /app/echoproxy /usr/local/bin/echoproxy
 COPY ./config/config.example.json /root/config.json
 
 ENV PORT=8080
-CMD ["/usr/local/bin/echoproxy", "-config", "/root/config.json"]
+# Automatically use -config-env if PROXY_CONFIG is set, otherwise use config file
+CMD ["sh", "-c", "if [ -n \"$PROXY_CONFIG\" ]; then /usr/local/bin/echoproxy -config-env PROXY_CONFIG; else /usr/local/bin/echoproxy -config /root/config.json; fi"]

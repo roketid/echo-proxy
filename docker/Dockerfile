@@ -41,5 +41,5 @@ RUN chown -R appuser:appuser /app && chmod -R 755 /app
 # Switch to non-root user
 USER appuser
 
-# Command to run
-CMD ["sh", "-c", "./main -config ${CONFIG_PATH}"]
+# Command to run - automatically use -config-env if PROXY_CONFIG is set, otherwise use config file
+CMD ["sh", "-c", "if [ -n \"$PROXY_CONFIG\" ]; then ./main -config-env PROXY_CONFIG; else ./main -config ${CONFIG_PATH}; fi"]
