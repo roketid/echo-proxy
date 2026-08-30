@@ -67,5 +67,8 @@
     "host_override": "httpbin.org",
     "path_rewrite_regex": "^/old/(.*)",
     "path_rewrite_replacement": "/new/$1"
+  },
+  "*": {
+    "static_index_file": "./public/index.html"
   }
 }

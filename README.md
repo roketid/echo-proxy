@@ -119,6 +119,42 @@ You can add a `condition` object to a host config to only proxy requests that ma
 
 If the condition is not met, the proxy will use the `fallback_behavior` (e.g., "404", "bad_gateway", or proxy to a fallback upstream if `fallback_upstream` is set).
 
+### Fallback for Unmatched Hosts
+If a request's `Host` header doesn't match any configured host, the proxy normally responds with `502 Bad Gateway`. You can override this by adding a reserved `"*"` entry to your config — it's used only when nothing else matches:
+
+```json
+{
+  "*": {
+    "upstream": "https://default-upstream.example.com"
+  }
+}
+```
+
+If the `"*"` entry has an `upstream`, unmatched requests are reverse-proxied to it just like any other host (headers, timeouts, path rewriting, etc. all apply). If it has no `upstream` but sets `static_index_file`, that file is served instead:
+
+```json
+{
+  "*": {
+    "static_index_file": "./public/index.html"
+  }
+}
+```
+
+If neither is set (or no `"*"` entry exists at all), the proxy falls back to the default `502 Bad Gateway` response.
+
+#### Configuring the Fallback via Environment Variables
+If your config doesn't define a `"*"` entry, you can set it via environment variables instead — handy when you don't want to edit `config.json` per environment:
+
+- `DEFAULT_UPSTREAM`: default upstream URL for unmatched hosts.
+- `DEFAULT_STATIC_INDEX_FILE`: path to a static HTML file to serve for unmatched hosts (used only if `DEFAULT_UPSTREAM` is not set).
+
+```bash
+export DEFAULT_UPSTREAM="https://default-upstream.example.com"
+./proxy-server -config config.json
+```
+
+An explicit `"*"` entry in `config.json` (or `PROXY_CONFIG`) always takes precedence over these environment variables.
+
 ### Path Rewriting
 You can rewrite request paths using regex patterns by adding `path_rewrite_regex` and `path_rewrite_replacement` to your host config:
 

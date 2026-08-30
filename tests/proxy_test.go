@@ -3,6 +3,8 @@ package proxy_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/roketid/echo-proxy/internal/proxy"
@@ -186,4 +188,101 @@ func TestProxyFallbackBehavior(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Fallback upstream")
+}
+
+func TestNoMatchWithoutWildcard(t *testing.T) {
+	config := map[string]proxy.ProxyConfig{
+		"known.com": {Upstream: "http://localhost:9999"},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "unknown.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadGateway, rec.Code)
+}
+
+func TestNoMatchFallsBackToWildcardUpstream(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Default upstream"))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"known.com":        {Upstream: "http://localhost:9999"},
+		proxy.WildcardHost: {Upstream: upstream.URL},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "unknown.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Default upstream")
+}
+
+func writeConfigFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	assert.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	return path
+}
+
+func TestLoadConfigEnvFallbackAppliedWhenMissing(t *testing.T) {
+	t.Setenv("DEFAULT_UPSTREAM", "https://default.example.com")
+	t.Setenv("DEFAULT_STATIC_INDEX_FILE", "")
+
+	path := writeConfigFile(t, `{"known.com": {"upstream": "https://known.example.com"}}`)
+	configs := proxy.LoadConfig(path)
+
+	wildcard, exists := configs[proxy.WildcardHost]
+	assert.True(t, exists)
+	assert.Equal(t, "https://default.example.com", wildcard.Upstream)
+}
+
+func TestLoadConfigEnvFallbackSkippedWhenWildcardConfigured(t *testing.T) {
+	t.Setenv("DEFAULT_UPSTREAM", "https://should-not-be-used.example.com")
+
+	path := writeConfigFile(t, `{"*": {"static_index_file": "./index.html"}}`)
+	configs := proxy.LoadConfig(path)
+
+	wildcard, exists := configs[proxy.WildcardHost]
+	assert.True(t, exists)
+	assert.Equal(t, "./index.html", wildcard.StaticIndexFile)
+	assert.Equal(t, "", wildcard.Upstream)
+}
+
+func TestLoadConfigEnvFallbackNotAppliedWhenEnvUnset(t *testing.T) {
+	t.Setenv("DEFAULT_UPSTREAM", "")
+	t.Setenv("DEFAULT_STATIC_INDEX_FILE", "")
+
+	path := writeConfigFile(t, `{"known.com": {"upstream": "https://known.example.com"}}`)
+	configs := proxy.LoadConfig(path)
+
+	_, exists := configs[proxy.WildcardHost]
+	assert.False(t, exists)
+}
+
+func TestNoMatchFallsBackToWildcardStaticIndex(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.html")
+	assert.NoError(t, os.WriteFile(indexPath, []byte("<h1>Default page</h1>"), 0o644))
+
+	config := map[string]proxy.ProxyConfig{
+		proxy.WildcardHost: {StaticIndexFile: indexPath},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "unknown.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Default page")
 }

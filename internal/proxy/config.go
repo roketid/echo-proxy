@@ -26,16 +26,20 @@ type ProxyConfig struct {
 	PathRewriteRegex       string `json:"path_rewrite_regex,omitempty"`       // regex pattern
 	PathRewriteReplacement string `json:"path_rewrite_replacement,omitempty"` // replacement string
 
+	// StaticIndexFile is served directly when this config has no Upstream.
+	// Used for the "*" wildcard entry to serve a static page for unmatched hosts.
+	StaticIndexFile string `json:"static_index_file,omitempty"`
+
 	// Pre-compiled regex for performance (not JSON serialized)
 	CompiledRegex *regexp.Regexp `json:"-"`
 	// Pre-parsed URL for performance (not JSON serialized)
 	ParsedURL         *url.URL `json:"-"`
 	ParsedFallbackURL *url.URL `json:"-"`
 	// Timeout settings in seconds
-	DialTimeout   int `json:"dial_timeout,omitempty"`
-	ReadTimeout   int `json:"read_timeout,omitempty"`
-	WriteTimeout  int `json:"write_timeout,omitempty"`
-	IdleTimeout   int `json:"idle_timeout,omitempty"`
+	DialTimeout  int `json:"dial_timeout,omitempty"`
+	ReadTimeout  int `json:"read_timeout,omitempty"`
+	WriteTimeout int `json:"write_timeout,omitempty"`
+	IdleTimeout  int `json:"idle_timeout,omitempty"`
 }
 
 // ProxyCondition defines a condition for proxying
@@ -131,5 +135,27 @@ func initializeConfigs(configs map[string]ProxyConfig) map[string]ProxyConfig {
 
 		configs[host] = cfg
 	}
+
+	applyEnvFallback(configs)
 	return configs
+}
+
+// applyEnvFallback populates the "*" wildcard entry from DEFAULT_UPSTREAM /
+// DEFAULT_STATIC_INDEX_FILE environment variables when the config doesn't
+// already define one. An explicit "*" entry in config.json / PROXY_CONFIG
+// always takes precedence.
+func applyEnvFallback(configs map[string]ProxyConfig) {
+	if _, exists := configs[WildcardHost]; exists {
+		return
+	}
+
+	upstream := os.Getenv("DEFAULT_UPSTREAM")
+	staticIndexFile := os.Getenv("DEFAULT_STATIC_INDEX_FILE")
+	if upstream == "" && staticIndexFile == "" {
+		return
+	}
+
+	cfg := ProxyConfig{Upstream: upstream, StaticIndexFile: staticIndexFile}
+	initializeConfig(&cfg)
+	configs[WildcardHost] = cfg
 }

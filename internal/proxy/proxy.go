@@ -31,11 +31,15 @@ func (pm *ProxyManager) NewProxy() *echo.Echo {
 	return e
 }
 
+// WildcardHost is the reserved config key used as a fallback when the
+// request Host does not match any configured host.
+const WildcardHost = "*"
+
 func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 	host := c.Request().Host
 	config, exists := pm.Proxies[host]
 	if !exists {
-		return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
+		return pm.handleNoMatch(c)
 	}
 
 	// Ensure config is initialized (for tests and backward compatibility)
@@ -49,6 +53,31 @@ func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 	}
 
 	return pm.serveProxy(c, config)
+}
+
+// handleNoMatch is used when the request Host matches no configured host.
+// It falls back to the "*" wildcard config if one is set: proxying to its
+// upstream (if configured) or serving its static_index_file, in that order.
+func (pm *ProxyManager) handleNoMatch(c echo.Context) error {
+	config, exists := pm.Proxies[WildcardHost]
+	if !exists {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
+	}
+
+	if config.ParsedURL == nil && config.Upstream != "" {
+		initializeConfig(&config)
+		pm.Proxies[WildcardHost] = config
+	}
+
+	if config.ParsedURL != nil {
+		return pm.serveProxy(c, config)
+	}
+
+	if config.StaticIndexFile != "" {
+		return c.File(config.StaticIndexFile)
+	}
+
+	return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
 }
 
 func (pm *ProxyManager) checkCondition(c echo.Context, cond *ProxyCondition) bool {
