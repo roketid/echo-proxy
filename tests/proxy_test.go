@@ -226,6 +226,153 @@ func TestNoMatchFallsBackToWildcardUpstream(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Default upstream")
 }
 
+func TestProxyRoutesHeaderMatch(t *testing.T) {
+	upstreamA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("From A"))
+	}))
+	defer upstreamA.Close()
+
+	upstreamB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("From B"))
+	}))
+	defer upstreamB.Close()
+
+	upstreamDefault := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("From default"))
+	}))
+	defer upstreamDefault.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"multi.com": {
+			Routes: []proxy.Route{
+				{Condition: &proxy.ProxyCondition{Header: "target-app", Value: "a"}, Upstream: upstreamA.URL},
+				{Condition: &proxy.ProxyCondition{Header: "target-app", Value: "b"}, Upstream: upstreamB.URL},
+				{Upstream: upstreamDefault.URL},
+			},
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "multi.com"
+	req.Header.Set("target-app", "a")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "From A")
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.Host = "multi.com"
+	req2.Header.Set("target-app", "b")
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+	assert.Contains(t, rec2.Body.String(), "From B")
+
+	// No matching header -> falls through to the catch-all (no-condition) route
+	req3 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req3.Host = "multi.com"
+	rec3 := httptest.NewRecorder()
+	e.ServeHTTP(rec3, req3)
+	assert.Equal(t, http.StatusOK, rec3.Code)
+	assert.Contains(t, rec3.Body.String(), "From default")
+}
+
+func TestProxyRoutesPathPrefixMatch(t *testing.T) {
+	upstreamAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("API service"))
+	}))
+	defer upstreamAPI.Close()
+
+	upstreamFiles := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Files service"))
+	}))
+	defer upstreamFiles.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"path-route.com": {
+			Routes: []proxy.Route{
+				{Condition: &proxy.ProxyCondition{PathPrefix: "/api/"}, Upstream: upstreamAPI.URL},
+				{Condition: &proxy.ProxyCondition{PathPrefix: "/files/"}, Upstream: upstreamFiles.URL},
+			},
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.Host = "path-route.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "API service")
+
+	req2 := httptest.NewRequest(http.MethodGet, "/files/report.pdf", nil)
+	req2.Host = "path-route.com"
+	rec2 := httptest.NewRecorder()
+	e.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+	assert.Contains(t, rec2.Body.String(), "Files service")
+}
+
+func TestProxyRoutesNoMatchUsesFallbackBehavior(t *testing.T) {
+	upstreamA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("From A"))
+	}))
+	defer upstreamA.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"no-match.com": {
+			Routes: []proxy.Route{
+				{Condition: &proxy.ProxyCondition{Header: "target-app", Value: "a"}, Upstream: upstreamA.URL},
+			},
+			FallbackBehavior: "404",
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "no-match.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestProxyRoutesHostOverridePerRoute(t *testing.T) {
+	var seenHost string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenHost = r.Host
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	config := map[string]proxy.ProxyConfig{
+		"override.com": {
+			Routes: []proxy.Route{
+				{Upstream: upstream.URL, HostOverride: "custom-host.example.com"},
+			},
+		},
+	}
+	proxyManager := proxy.NewProxyManager(config)
+	e := proxyManager.NewProxy()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "override.com"
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "custom-host.example.com", seenHost)
+}
+
 func writeConfigFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.json")

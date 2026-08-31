@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-01
+
+### Added
+- **Multiple Upstreams per Host (Routes)**: Route a single host to more than two upstreams via an ordered `routes` list
+  - Each route has its own optional `condition` (`header`, `query_param`, or the new `path_prefix` matcher) and `upstream`
+  - Evaluated in order; first match wins, and a route with no `condition` acts as a catch-all
+  - Per-route overrides for `upstream`, `host_override`, and `path_rewrite_regex`/`path_rewrite_replacement`; shared settings (`request_headers`, `response_headers`, `remove_headers`, timeouts) stay at the host level
+  - Falls back to the host's existing `fallback_behavior`/`fallback_upstream` when no route matches
+  - Fully backward compatible: existing single `upstream` + `condition` + `fallback_upstream` configs are unaffected
+
+### Changed
+- **Configuration Structure**: Added new optional fields:
+  - `Routes []Route` on `ProxyConfig`
+  - New `Route` struct: `Condition`, `Upstream`, `HostOverride`, `PathRewriteRegex`, `PathRewriteReplacement`
+  - `PathPrefix` added to `ProxyCondition` as a third condition type alongside `Header`/`QueryParam`
+
+### Testing
+- Added test coverage for routes: header-based matching, path-prefix matching, catch-all fallthrough, no-match fallback behavior, and per-route `host_override`
+
+## [1.1.1] - 2026-08-30
+
+### Security
+- **Dependency Upgrade**: Bumped `echo`, `gommon`, `testify`, and `golang.org/x/{crypto,net,sys,text,time}` to their latest patched versions to resolve Dependabot vulnerability alerts
+  - `go.mod` now requires Go >= 1.25; `Dockerfile.root` builder image bumped to `golang:1.25` to match
+  - `govulncheck` now reports 0 reachable vulnerabilities, down from 28 stdlib + 13 imported-package findings
+
+## [1.1.0] - 2026-08-30
+
+### Added
+- **Fallback for Unmatched Hosts**: A reserved `"*"` wildcard config entry is now used when a request's `Host` header matches no configured host
+  - Proxies to a default upstream, or serves a static `index.html`, before falling back to the existing `502 Bad Gateway`
+  - Configurable via `DEFAULT_UPSTREAM` / `DEFAULT_STATIC_INDEX_FILE` environment variables when `config.json` doesn't define a `"*"` entry
+
+### Security
+- **GitHub Actions Hardening**: Restricted the `docker-publish` workflow's push trigger from all branches (`*`) to `main` only, keeping tag-based triggers for releases
+
 ## [1.0.0] - 2026-05-18
 
 ### Added

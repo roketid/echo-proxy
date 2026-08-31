@@ -8,6 +8,7 @@ This project is a reverse proxy built using the Echo framework in Golang. It sup
 - Remove specific headers from responses.
 - Rewrite request paths using regex patterns.
 - Conditional proxying based on headers or query parameters.
+- Route a single host to multiple upstreams via ordered rules (header, query param, or path prefix).
 - Configuration via `json` file.
 - Supports Docker deployment.
 
@@ -118,6 +119,29 @@ You can add a `condition` object to a host config to only proxy requests that ma
   ```
 
 If the condition is not met, the proxy will use the `fallback_behavior` (e.g., "404", "bad_gateway", or proxy to a fallback upstream if `fallback_upstream` is set).
+
+### Multiple Upstreams per Host (Routes)
+A single host key normally maps to one `upstream` (with an optional `condition` + `fallback_upstream` for a two-way choice). If you need to route the same host to more than two upstreams, use `routes` instead: an ordered list of rules, each with its own `condition` and `upstream`. The first matching route wins; a route with no `condition` is a catch-all and should go last.
+
+```json
+{
+  "api.example.com": {
+    "routes": [
+      { "condition": { "header": "target-app", "value": "b" }, "upstream": "https://service-b.example.com" },
+      { "condition": { "query_param": "region", "value": "eu" }, "upstream": "https://eu.example.com" },
+      { "condition": { "path_prefix": "/files/" }, "upstream": "https://files.example.com" },
+      { "upstream": "https://default.example.com" }
+    ],
+    "request_headers": {},
+    "remove_headers": ["Server"]
+  }
+}
+```
+
+- Conditions support `header`, `query_param` (matched by equality against `value`), or `path_prefix` (matches when the request path starts with the given prefix).
+- Each route can set its own `upstream`, `host_override`, and `path_rewrite_regex`/`path_rewrite_replacement`. Everything else (`request_headers`, `response_headers`, `remove_headers`, timeouts) is shared from the host-level config.
+- If no route matches, the host's `fallback_behavior`/`fallback_upstream` is used, just like the single-`condition` case (defaulting to `502 Bad Gateway` if unset).
+- `routes` takes precedence over the top-level `upstream`/`condition` fields when both are present, but existing configs using only `upstream`/`condition` keep working unchanged.
 
 ### Fallback for Unmatched Hosts
 If a request's `Host` header doesn't match any configured host, the proxy normally responds with `502 Bad Gateway`. You can override this by adding a reserved `"*"` entry to your config — it's used only when nothing else matches:

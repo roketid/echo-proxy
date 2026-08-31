@@ -68,6 +68,29 @@
     "path_rewrite_regex": "^/old/(.*)",
     "path_rewrite_replacement": "/new/$1"
   },
+  "multi.httpbin.local": {
+    "routes": [
+      {
+        "condition": {
+          "header": "target-app",
+          "value": "b"
+        },
+        "upstream": "https://httpbingo.org",
+        "host_override": "httpbingo.org"
+      },
+      {
+        "condition": {
+          "path_prefix": "/status/"
+        },
+        "upstream": "https://httpbin.org/status/200",
+        "host_override": "httpbin.org"
+      },
+      {
+        "upstream": "https://httpbin.org",
+        "host_override": "httpbin.org"
+      }
+    ]
+  },
   "*": {
     "static_index_file": "./public/index.html"
   }

@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -43,9 +44,16 @@ func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 	}
 
 	// Ensure config is initialized (for tests and backward compatibility)
-	if config.ParsedURL == nil && config.Upstream != "" {
+	if needsInit(config) {
 		initializeConfig(&config)
 		pm.Proxies[host] = config
+	}
+
+	if len(config.Routes) > 0 {
+		if route, matched := pm.matchRoute(c, config.Routes); matched {
+			return pm.serveProxy(c, effectiveConfig(config, route))
+		}
+		return pm.handleFallback(c, config)
 	}
 
 	if config.Condition != nil && !pm.checkCondition(c, config.Condition) {
@@ -53,6 +61,35 @@ func (pm *ProxyManager) proxyHandler(c echo.Context) error {
 	}
 
 	return pm.serveProxy(c, config)
+}
+
+// matchRoute returns the first route whose condition matches the request.
+// A route with no condition is a catch-all and always matches.
+func (pm *ProxyManager) matchRoute(c echo.Context, routes []Route) (Route, bool) {
+	for _, route := range routes {
+		if route.Condition == nil || pm.checkCondition(c, route.Condition) {
+			return route, true
+		}
+	}
+	return Route{}, false
+}
+
+// effectiveConfig applies a matched route's overrides on top of the host's
+// shared config (request/response headers, remove_headers, timeouts stay
+// from the host level).
+func effectiveConfig(config ProxyConfig, route Route) ProxyConfig {
+	effective := config
+	effective.Upstream = route.Upstream
+	effective.ParsedURL = route.ParsedURL
+	if route.HostOverride != "" {
+		effective.HostOverride = route.HostOverride
+	}
+	if route.CompiledRegex != nil {
+		effective.PathRewriteRegex = route.PathRewriteRegex
+		effective.PathRewriteReplacement = route.PathRewriteReplacement
+		effective.CompiledRegex = route.CompiledRegex
+	}
+	return effective
 }
 
 // handleNoMatch is used when the request Host matches no configured host.
@@ -64,7 +101,7 @@ func (pm *ProxyManager) handleNoMatch(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
 	}
 
-	if config.ParsedURL == nil && config.Upstream != "" {
+	if needsInit(config) {
 		initializeConfig(&config)
 		pm.Proxies[WildcardHost] = config
 	}
@@ -80,7 +117,26 @@ func (pm *ProxyManager) handleNoMatch(c echo.Context) error {
 	return c.JSON(http.StatusBadGateway, map[string]string{"error": "No upstream for host"})
 }
 
+// needsInit reports whether config (or one of its routes) still has
+// unparsed upstream URLs, e.g. when built directly in tests rather than
+// via LoadConfig.
+func needsInit(config ProxyConfig) bool {
+	if config.ParsedURL == nil && config.Upstream != "" {
+		return true
+	}
+	for _, route := range config.Routes {
+		if route.ParsedURL == nil && route.Upstream != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (pm *ProxyManager) checkCondition(c echo.Context, cond *ProxyCondition) bool {
+	if cond.PathPrefix != "" {
+		return strings.HasPrefix(c.Request().URL.Path, cond.PathPrefix)
+	}
+
 	var actual string
 	if cond.Header != "" {
 		actual = c.Request().Header.Get(cond.Header)
@@ -191,6 +247,18 @@ func initializeConfig(cfg *ProxyConfig) {
 	if cfg.FallbackUpstream != "" {
 		parsedURL, _ := parseURL(cfg.FallbackUpstream)
 		cfg.ParsedFallbackURL = parsedURL
+	}
+
+	for i := range cfg.Routes {
+		route := &cfg.Routes[i]
+		if route.PathRewriteRegex != "" {
+			re, _ := regexp.Compile(route.PathRewriteRegex)
+			route.CompiledRegex = re
+		}
+		if route.Upstream != "" {
+			parsedURL, _ := parseURL(route.Upstream)
+			route.ParsedURL = parsedURL
+		}
 	}
 
 	if cfg.DialTimeout == 0 {
