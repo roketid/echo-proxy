@@ -434,6 +434,113 @@ func TestNoMatchFallsBackToWildcardStaticIndex(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Default page")
 }
 
+// echoHeaders answers with the request headers it got as response headers
+// prefixed "Seen-", and sets Server and X-Powered-By for remove_headers.
+func echoHeaders() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for name, values := range r.Header {
+			w.Header().Set("Seen-"+name, values[0])
+		}
+		w.Header().Set("Server", "nginx")
+		w.Header().Set("X-Powered-By", "php")
+		w.WriteHeader(http.StatusOK)
+	}))
+}
+
+func routeHeadersConfig(kv, other string) map[string]proxy.ProxyConfig {
+	return map[string]proxy.ProxyConfig{
+		"api.com": {
+			RequestHeaders:  map[string]string{"X-Host": "host", "X-Shared": "from-host", "Cookie": "host-cookie"},
+			ResponseHeaders: map[string]string{"X-Host-Response": "host"},
+			RemoveHeaders:   []string{"Server"},
+			Routes: []proxy.Route{
+				{
+					Condition:       &proxy.ProxyCondition{PathPrefix: "/kv/"},
+					Upstream:        kv,
+					RequestHeaders:  map[string]string{"X-Shared": "from-route", "cookie": "route-cookie", "Authorization": "Bearer route"},
+					ResponseHeaders: map[string]string{"X-Route-Response": "route"},
+					RemoveHeaders:   []string{"X-Powered-By"},
+				},
+				{Upstream: other},
+			},
+		},
+	}
+}
+
+func serveAPI(e http.Handler, path string, header http.Header) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Host = "api.com"
+	for name, values := range header {
+		req.Header[name] = values
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestProxyRoutesHeadersOnTopOfTheHost(t *testing.T) {
+	kv, other := echoHeaders(), echoHeaders()
+	defer kv.Close()
+	defer other.Close()
+	e := proxy.NewProxyManager(routeHeadersConfig(kv.URL, other.URL)).NewProxy()
+
+	rec := serveAPI(e, "/kv/x", http.Header{"Authorization": {"Bearer client"}})
+	assert.Equal(t, http.StatusOK, rec.Code)
+	got := rec.Header()
+	// Request headers: the host's, with the route's on top, names compared without case.
+	assert.Equal(t, "host", got.Get("Seen-X-Host"))
+	assert.Equal(t, "from-route", got.Get("Seen-X-Shared"))
+	assert.Equal(t, "route-cookie", got.Get("Seen-Cookie"))
+	assert.Equal(t, "Bearer route", got.Get("Seen-Authorization"))
+	// Response headers merged; the route's remove_headers replaces the host's.
+	assert.Equal(t, "host", got.Get("X-Host-Response"))
+	assert.Equal(t, "route", got.Get("X-Route-Response"))
+	assert.Empty(t, got.Get("X-Powered-By"))
+	assert.Equal(t, "nginx", got.Get("Server"))
+}
+
+func TestProxyRoutesHeadersStayOnTheirRoute(t *testing.T) {
+	kv, other := echoHeaders(), echoHeaders()
+	defer kv.Close()
+	defer other.Close()
+	config := routeHeadersConfig(kv.URL, other.URL)
+	e := proxy.NewProxyManager(config).NewProxy()
+
+	serveAPI(e, "/kv/x", nil) // the route must not change the host's settings for later requests
+	rec := serveAPI(e, "/other", http.Header{"Authorization": {"Bearer client"}})
+	got := rec.Header()
+	assert.Equal(t, "from-host", got.Get("Seen-X-Shared"))
+	assert.Equal(t, "host-cookie", got.Get("Seen-Cookie"))
+	assert.Equal(t, "Bearer client", got.Get("Seen-Authorization"))
+	assert.Empty(t, got.Get("Server"))
+	assert.Equal(t, "php", got.Get("X-Powered-By"))
+	assert.Empty(t, got.Get("X-Route-Response"))
+	assert.Equal(t, map[string]string{"X-Host": "host", "X-Shared": "from-host", "Cookie": "host-cookie"},
+		config["api.com"].RequestHeaders)
+}
+
+func TestProxyRoutesHeadersWithoutHostHeaders(t *testing.T) {
+	kv := echoHeaders()
+	defer kv.Close()
+	config := map[string]proxy.ProxyConfig{
+		"api.com": {Routes: []proxy.Route{
+			{Upstream: kv.URL, RequestHeaders: map[string]string{"X-Only-Route": "yes"}, RemoveHeaders: []string{}},
+		}},
+	}
+	rec := serveAPI(proxy.NewProxyManager(config).NewProxy(), "/", nil)
+	assert.Equal(t, "yes", rec.Header().Get("Seen-X-Only-Route"))
+	assert.Equal(t, "nginx", rec.Header().Get("Server"))
+}
+
+func TestLoadConfigReadsRouteHeaders(t *testing.T) {
+	path := writeConfigFile(t, `{"api.com": {"routes": [{"upstream": "http://kv.local",
+		"request_headers": {"Cookie": "c"}, "response_headers": {"X-R": "r"}, "remove_headers": ["Set-Cookie"]}]}}`)
+	route := proxy.LoadConfig(path)["api.com"].Routes[0]
+	assert.Equal(t, map[string]string{"Cookie": "c"}, route.RequestHeaders)
+	assert.Equal(t, map[string]string{"X-R": "r"}, route.ResponseHeaders)
+	assert.Equal(t, []string{"Set-Cookie"}, route.RemoveHeaders)
+}
+
 // pathEcho answers with the path it was asked for.
 func pathEcho() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-Route Headers**: a route in `routes` can set `request_headers`, `response_headers` and `remove_headers` for the requests it serves
+  - Header maps are merged with the host's header by header; the route's value wins, names compared without case
+  - `remove_headers` on a route replaces the host's list (an empty list removes nothing)
+  - The other routes and `fallback_behavior`/`fallback_upstream` keep the host's settings; timeouts stay host-level
+  - Fully backward compatible: routes without these keys behave as before
+
 ### Fixed
 - **Path Rewrite to an Empty String**: `path_rewrite_replacement: ""` now strips what `path_rewrite_regex` matched (e.g. `^/api` turns `/api/users` into `/users`), for hosts and routes alike. It used to skip the rewrite. A config that set a regex with an empty replacement and relied on nothing happening now gets the rewrite
 
 ### Testing
 - Added tests for prefix stripping with an empty replacement, on a host, on a route and from a config file
+- Added tests for per-route header merging (including case), `remove_headers` replacement, route headers on a host without any, headers staying on their route without changing the host's config, and loading the new keys from a config file
 
 ## [1.2.0] - 2026-09-01
 

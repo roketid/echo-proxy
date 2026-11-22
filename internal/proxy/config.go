@@ -72,6 +72,14 @@ type Route struct {
 	PathRewriteRegex       string `json:"path_rewrite_regex,omitempty"`
 	PathRewriteReplacement string `json:"path_rewrite_replacement,omitempty"`
 
+	// RequestHeaders and ResponseHeaders are added to the host's for the
+	// requests this route serves, header by header: the route's value wins
+	// (names compared without case). RemoveHeaders, when set, replaces the
+	// host's list for this route; an empty list removes nothing.
+	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
+	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	RemoveHeaders   []string          `json:"remove_headers,omitempty"`
+
 	// Pre-parsed/pre-compiled, not JSON serialized.
 	ParsedURL     *url.URL       `json:"-"`
 	CompiledRegex *regexp.Regexp `json:"-"`

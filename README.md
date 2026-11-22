@@ -139,7 +139,26 @@ A single host key normally maps to one `upstream` (with an optional `condition` 
 ```
 
 - Conditions support `header`, `query_param` (matched by equality against `value`), or `path_prefix` (matches when the request path starts with the given prefix).
-- Each route can set its own `upstream`, `host_override`, and `path_rewrite_regex`/`path_rewrite_replacement`. Everything else (`request_headers`, `response_headers`, `remove_headers`, timeouts) is shared from the host-level config.
+- Each route can set its own `upstream`, `host_override`, and `path_rewrite_regex`/`path_rewrite_replacement`.
+- A route can also set `request_headers`, `response_headers` and `remove_headers` for the requests it serves. Header maps are merged with the host's header by header, the route's value winning (names compared without case); `remove_headers` replaces the host's list (an empty list removes nothing). The other routes and the fallback keep the host's settings, and timeouts are always the host's. A header the host sets can be given another value on a route, not dropped.
+
+  ```json
+  {
+    "api.example.com": {
+      "request_headers": { "X-Source": "edge" },
+      "remove_headers": ["Server"],
+      "routes": [
+        {
+          "condition": { "path_prefix": "/kv/" },
+          "upstream": "https://kv.example.com",
+          "request_headers": { "Cookie": "session=secret" },
+          "remove_headers": ["Server", "Set-Cookie"]
+        },
+        { "upstream": "https://default.example.com" }
+      ]
+    }
+  }
+  ```
 - If no route matches, the host's `fallback_behavior`/`fallback_upstream` is used, just like the single-`condition` case (defaulting to `502 Bad Gateway` if unset).
 - `routes` takes precedence over the top-level `upstream`/`condition` fields when both are present, but existing configs using only `upstream`/`condition` keep working unchanged.
 

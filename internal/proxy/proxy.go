@@ -75,8 +75,9 @@ func (pm *ProxyManager) matchRoute(c echo.Context, routes []Route) (Route, bool)
 }
 
 // effectiveConfig applies a matched route's overrides on top of the host's
-// shared config (request/response headers, remove_headers, timeouts stay
-// from the host level).
+// shared config. Header maps are merged (the route's value wins);
+// remove_headers is replaced when the route sets it. Timeouts stay from the
+// host level.
 func effectiveConfig(config ProxyConfig, route Route) ProxyConfig {
 	effective := config
 	effective.Upstream = route.Upstream
@@ -89,7 +90,38 @@ func effectiveConfig(config ProxyConfig, route Route) ProxyConfig {
 		effective.PathRewriteReplacement = route.PathRewriteReplacement
 		effective.CompiledRegex = route.CompiledRegex
 	}
+	effective.RequestHeaders = mergeHeaders(config.RequestHeaders, route.RequestHeaders)
+	effective.ResponseHeaders = mergeHeaders(config.ResponseHeaders, route.ResponseHeaders)
+	if route.RemoveHeaders != nil {
+		effective.RemoveHeaders = route.RemoveHeaders
+	}
 	return effective
+}
+
+// mergeHeaders returns the host's headers with the route's on top. Names are
+// compared in canonical form, so a route's "cookie" replaces the host's
+// "Cookie" instead of both being set. The host's map is never modified.
+func mergeHeaders(host, route map[string]string) map[string]string {
+	if len(route) == 0 {
+		return host
+	}
+	if len(host) == 0 {
+		return route
+	}
+	overridden := make(map[string]bool, len(route))
+	for name := range route {
+		overridden[http.CanonicalHeaderKey(name)] = true
+	}
+	merged := make(map[string]string, len(host)+len(route))
+	for name, value := range host {
+		if !overridden[http.CanonicalHeaderKey(name)] {
+			merged[name] = value
+		}
+	}
+	for name, value := range route {
+		merged[name] = value
+	}
+	return merged
 }
 
 // handleNoMatch is used when the request Host matches no configured host.
