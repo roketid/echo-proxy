@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Path Rewrite to an Empty String**: `path_rewrite_replacement: ""` now strips what `path_rewrite_regex` matched (e.g. `^/api` turns `/api/users` into `/users`), for hosts and routes alike. It used to skip the rewrite. A config that set a regex with an empty replacement and relied on nothing happening now gets the rewrite
+
+### Testing
+- Added tests for prefix stripping with an empty replacement, on a host, on a route and from a config file
+
 ## [1.2.0] - 2026-09-01
 
 ### Added

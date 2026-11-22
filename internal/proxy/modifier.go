@@ -26,8 +26,9 @@ func ModifyRequest(req *http.Request, c echo.Context, target *url.URL, config Pr
 	}
 	req.Header.Set("X-Forwarded-For", c.RealIP())
 
-	// Handle path rewriting if specified (using pre-compiled regex)
-	if config.CompiledRegex != nil && config.PathRewriteReplacement != "" {
+	// Handle path rewriting if specified (using pre-compiled regex). An empty
+	// replacement is a valid rewrite: it strips what the regex matched.
+	if config.CompiledRegex != nil {
 		req.URL.Path = config.CompiledRegex.ReplaceAllString(req.URL.Path, config.PathRewriteReplacement)
 	}
 }

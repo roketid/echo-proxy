@@ -433,3 +433,44 @@ func TestNoMatchFallsBackToWildcardStaticIndex(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Default page")
 }
+
+// pathEcho answers with the path it was asked for.
+func pathEcho() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Path: " + r.URL.Path))
+	}))
+}
+
+func getPath(e http.Handler, host, path string) string {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Host = host
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec.Body.String()
+}
+
+func TestProxyRewritePathWithEmptyReplacementStripsTheMatch(t *testing.T) {
+	upstream := pathEcho()
+	defer upstream.Close()
+	config := map[string]proxy.ProxyConfig{
+		"strip.com": {Upstream: upstream.URL, PathRewriteRegex: "^/api", PathRewriteReplacement: ""},
+		"route-strip.com": {Routes: []proxy.Route{
+			{Condition: &proxy.ProxyCondition{PathPrefix: "/kv/"}, Upstream: upstream.URL, PathRewriteRegex: "^/kv"},
+		}},
+	}
+	e := proxy.NewProxyManager(config).NewProxy()
+
+	assert.Equal(t, "Path: /users/1", getPath(e, "strip.com", "/api/users/1"))
+	assert.Equal(t, "Path: /other", getPath(e, "strip.com", "/other")) // no match: unchanged
+	assert.Equal(t, "Path: /namespaces", getPath(e, "route-strip.com", "/kv/namespaces"))
+}
+
+func TestLoadConfigEmptyReplacementStripsTheMatch(t *testing.T) {
+	upstream := pathEcho()
+	defer upstream.Close()
+	path := writeConfigFile(t, `{"strip.com": {"upstream": "`+upstream.URL+`",
+		"path_rewrite_regex": "^/api", "path_rewrite_replacement": ""}}`)
+	e := proxy.NewProxyManager(proxy.LoadConfig(path)).NewProxy()
+	assert.Equal(t, "Path: /users", getPath(e, "strip.com", "/api/users"))
+}
