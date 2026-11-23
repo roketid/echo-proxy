@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-24
+
 ### Security
 - **Dependency Upgrade**: Bumped `echo` to v4.16.6 (from v4.15.4), resolving 7 Dependabot alerts (1 critical, 3 high, 3 moderate), among them WebSocket upgrades bypassing route-level access controls, unbounded gzip expansion in `Decompress`, and open redirects. Also bumped `golang.org/x/{crypto,net,sys,text,time}` and `go-colorable` to their latest versions
 - **Client IP No Longer Spoofable**: covers echo advisories GO-2026-6875 (X-Real-IP from the client reaches the upstream) and GO-2026-6872 (spoofed X-Forwarded-For), which have no fixed echo release yet
