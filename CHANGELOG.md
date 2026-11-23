@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Dependency Upgrade**: Bumped `echo` to v4.16.6 (from v4.15.4), resolving 7 Dependabot alerts (1 critical, 3 high, 3 moderate), among them WebSocket upgrades bypassing route-level access controls, unbounded gzip expansion in `Decompress`, and open redirects. Also bumped `golang.org/x/{crypto,net,sys,text,time}` and `go-colorable` to their latest versions
+- Two echo advisories have no fix yet: GO-2026-6875 (X-Real-IP from the client reaches the upstream) and GO-2026-6872 (spoofed X-Forwarded-For in the default IP extraction)
+
+### Changed
+- **Go 1.26**: echo v4.16.6 requires it; `go.mod` and `docker/Dockerfile.root` (`golang:1.26`) are updated. `docker/Dockerfile` uses `golang:alpine` and builds unchanged
+
 ### Added
 - **Per-Route Headers**: a route in `routes` can set `request_headers`, `response_headers` and `remove_headers` for the requests it serves
   - Header maps are merged with the host's header by header; the route's value wins, names compared without case
