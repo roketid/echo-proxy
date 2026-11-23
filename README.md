@@ -198,6 +198,18 @@ export DEFAULT_UPSTREAM="https://default-upstream.example.com"
 
 An explicit `"*"` entry in `config.json` (or `PROXY_CONFIG`) always takes precedence over these environment variables.
 
+### Client IP and Trusted Proxies
+The proxy sends the client's IP to the upstream in `X-Forwarded-For` and `X-Real-IP`, and logs it. By default that IP is the connection's own address: whatever `X-Forwarded-For` or `X-Real-IP` a client sends is replaced, so it cannot pass the upstream an address of its choosing.
+
+When echo-proxy runs behind another proxy (Cloudflare, a load balancer, an ingress), the connection's address is that proxy's. List it in `TRUSTED_PROXIES` (IP addresses or CIDR ranges, comma-separated):
+
+```bash
+export TRUSTED_PROXIES="173.245.48.0/20, 103.21.244.0/22, 10.0.0.0/8"
+./proxy-server -config config.json
+```
+
+`X-Forwarded-For` is then read only for connections from a listed address: the client is the first address from the right that is not a trusted proxy. Connections from anywhere else still use their own address. Only the listed ranges are trusted, private and loopback addresses included, so list your load balancer's subnet if it is on one. An invalid entry stops the proxy at startup.
+
 ### Path Rewriting
 You can rewrite request paths using regex patterns by adding `path_rewrite_regex` and `path_rewrite_replacement` to your host config:
 

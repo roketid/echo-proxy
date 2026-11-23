@@ -16,6 +16,11 @@ import (
 // ProxyManager manages multiple proxies based on request Host
 type ProxyManager struct {
 	Proxies map[string]ProxyConfig
+
+	// TrustedProxies are the proxies whose X-Forwarded-For is believed when
+	// finding the client's IP (see ClientIPExtractor). Empty: the
+	// connection's own address is the client's.
+	TrustedProxies []*net.IPNet
 }
 
 // NewProxyManager initializes a proxy manager
@@ -26,6 +31,7 @@ func NewProxyManager(configs map[string]ProxyConfig) *ProxyManager {
 // NewProxy creates a new Echo instance with proxy setup
 func (pm *ProxyManager) NewProxy() *echo.Echo {
 	e := echo.New()
+	e.IPExtractor = ClientIPExtractor(pm.TrustedProxies)
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Any("/*", pm.proxyHandler)

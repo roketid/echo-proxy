@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **Dependency Upgrade**: Bumped `echo` to v4.16.6 (from v4.15.4), resolving 7 Dependabot alerts (1 critical, 3 high, 3 moderate), among them WebSocket upgrades bypassing route-level access controls, unbounded gzip expansion in `Decompress`, and open redirects. Also bumped `golang.org/x/{crypto,net,sys,text,time}` and `go-colorable` to their latest versions
-- Two echo advisories have no fix yet: GO-2026-6875 (X-Real-IP from the client reaches the upstream) and GO-2026-6872 (spoofed X-Forwarded-For in the default IP extraction)
+- **Client IP No Longer Spoofable**: covers echo advisories GO-2026-6875 (X-Real-IP from the client reaches the upstream) and GO-2026-6872 (spoofed X-Forwarded-For), which have no fixed echo release yet
+  - The client IP is the connection's own address unless it comes from a proxy listed in the new `TRUSTED_PROXIES` environment variable (IPs or CIDR ranges, comma-separated); only then is `X-Forwarded-For` read. Only the listed ranges are trusted, private and loopback addresses included
+  - The upstream gets that IP in both `X-Forwarded-For` and `X-Real-IP`; a client's own `X-Real-IP` used to pass through unchanged and is now replaced
+  - **Behavior change**: echo v4.16 no longer reads forwarding headers by default, so behind Cloudflare or a load balancer upstreams and logs see the proxy's address. Set `TRUSTED_PROXIES` to its ranges to get the client's back
+  - govulncheck keeps listing both advisories until echo releases a fix; they are filed against echo as a whole
 
 ### Changed
 - **Go 1.26**: echo v4.16.6 requires it; `go.mod` and `docker/Dockerfile.root` (`golang:1.26`) are updated. `docker/Dockerfile` uses `golang:alpine` and builds unchanged

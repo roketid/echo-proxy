@@ -35,7 +35,13 @@ func main() {
 		port = "8080"
 	}
 
+	trusted, err := proxy.ParseTrustedProxies(os.Getenv(proxy.TrustedProxiesEnv))
+	if err != nil {
+		log.Fatalf("Invalid %s: %v", proxy.TrustedProxiesEnv, err)
+	}
+
 	proxyServer := proxy.NewProxyManager(configs)
+	proxyServer.TrustedProxies = trusted
 	e := proxyServer.NewProxy()
 
 	// Register the logging middleware

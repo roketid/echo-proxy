@@ -24,7 +24,12 @@ func ModifyRequest(req *http.Request, c echo.Context, target *url.URL, config Pr
 	for key, value := range config.RequestHeaders {
 		req.Header.Set(key, value)
 	}
-	req.Header.Set("X-Forwarded-For", c.RealIP())
+	// The client's IP as e.IPExtractor found it (see ClientIPExtractor), so a
+	// client cannot pass the upstream an address of its own choosing, through
+	// either header.
+	clientIP := c.RealIP()
+	req.Header.Set("X-Forwarded-For", clientIP)
+	req.Header.Set("X-Real-IP", clientIP)
 
 	// Handle path rewriting if specified (using pre-compiled regex). An empty
 	// replacement is a valid rewrite: it strips what the regex matched.

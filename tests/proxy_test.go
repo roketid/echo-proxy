@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/roketid/echo-proxy/internal/proxy"
@@ -580,4 +581,90 @@ func TestLoadConfigEmptyReplacementStripsTheMatch(t *testing.T) {
 		"path_rewrite_regex": "^/api", "path_rewrite_replacement": ""}}`)
 	e := proxy.NewProxyManager(proxy.LoadConfig(path)).NewProxy()
 	assert.Equal(t, "Path: /users", getPath(e, "strip.com", "/api/users"))
+}
+
+// ipEcho answers with the client IP headers the upstream received.
+func ipEcho() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Header.Get("X-Forwarded-For") + "|" + r.Header.Get("X-Real-IP")))
+	}))
+}
+
+// forwardedIPs sends a request from remoteAddr with the given headers and
+// returns the upstream's X-Forwarded-For (its first, client entry; the
+// reverse proxy appends the connection's address after it) and X-Real-IP.
+func forwardedIPs(t *testing.T, pm *proxy.ProxyManager, remoteAddr string, headers map[string]string) (string, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "ip.com"
+	req.RemoteAddr = remoteAddr
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	rec := httptest.NewRecorder()
+	pm.NewProxy().ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	xff, realIP, _ := strings.Cut(rec.Body.String(), "|")
+	client, _, _ := strings.Cut(xff, ",")
+	return strings.TrimSpace(client), realIP
+}
+
+func TestClientIPIgnoresClientHeadersWithoutTrustedProxies(t *testing.T) {
+	upstream := ipEcho()
+	defer upstream.Close()
+	pm := proxy.NewProxyManager(map[string]proxy.ProxyConfig{"ip.com": {Upstream: upstream.URL}})
+
+	// Even from a private address, and the client's own X-Real-IP is replaced.
+	xff, realIP := forwardedIPs(t, pm, "10.0.0.5:1234", map[string]string{
+		"X-Forwarded-For": "1.2.3.4",
+		"X-Real-IP":       "5.6.7.8",
+	})
+	assert.Equal(t, "10.0.0.5", xff)
+	assert.Equal(t, "10.0.0.5", realIP)
+}
+
+func TestClientIPBelievesOnlyTrustedProxies(t *testing.T) {
+	upstream := ipEcho()
+	defer upstream.Close()
+	trusted, err := proxy.ParseTrustedProxies("173.245.48.0/20, 10.0.0.1")
+	assert.NoError(t, err)
+	pm := proxy.NewProxyManager(map[string]proxy.ProxyConfig{"ip.com": {Upstream: upstream.URL}})
+	pm.TrustedProxies = trusted
+
+	// From a trusted proxy: the client it reports.
+	xff, realIP := forwardedIPs(t, pm, "173.245.48.7:443", map[string]string{"X-Forwarded-For": "1.2.3.4"})
+	assert.Equal(t, "1.2.3.4", xff)
+	assert.Equal(t, "1.2.3.4", realIP)
+
+	// A spoofed entry before the real client is skipped: the walk stops at the
+	// first untrusted address from the right.
+	xff, _ = forwardedIPs(t, pm, "10.0.0.1:443", map[string]string{"X-Forwarded-For": "9.9.9.9, 1.2.3.4, 173.245.48.7"})
+	assert.Equal(t, "1.2.3.4", xff)
+
+	// From anyone else (here a private address not listed): its own address.
+	xff, realIP = forwardedIPs(t, pm, "10.0.0.9:443", map[string]string{
+		"X-Forwarded-For": "1.2.3.4",
+		"X-Real-IP":       "1.2.3.4",
+	})
+	assert.Equal(t, "10.0.0.9", xff)
+	assert.Equal(t, "10.0.0.9", realIP)
+}
+
+func TestParseTrustedProxies(t *testing.T) {
+	ranges, err := proxy.ParseTrustedProxies(" 10.0.0.0/8, 192.0.2.1 ,, 2001:db8::/32, ::1 ")
+	assert.NoError(t, err)
+	var got []string
+	for _, r := range ranges {
+		got = append(got, r.String())
+	}
+	assert.Equal(t, []string{"10.0.0.0/8", "192.0.2.1/32", "2001:db8::/32", "::1/128"}, got)
+
+	ranges, err = proxy.ParseTrustedProxies("")
+	assert.NoError(t, err)
+	assert.Empty(t, ranges)
+
+	_, err = proxy.ParseTrustedProxies("10.0.0.0/8, not-an-ip")
+	assert.ErrorContains(t, err, "not-an-ip")
+	_, err = proxy.ParseTrustedProxies("10.0.0.0/33")
+	assert.Error(t, err)
 }
